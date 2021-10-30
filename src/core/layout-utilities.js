@@ -15,6 +15,54 @@ var layoutUtilities = function (cy, options) {
     options[name] = val;
   };
 
+  instance.placeNewNodesNewHeuristic = function (newNodes) {
+    const currentNodes = cy.nodes(':visible').difference(newNodes);
+    const maxRank = this.rankNodes(newNodes, currentNodes);
+    console.log('maxRank:', maxRank);
+    console.log(newNodes.map(node => node.data()).sort((a,b) => {
+      return a.id.substring(1) - b.id.substring(1);
+    }));
+  };
+
+  instance.rankNodes = function (newNodes, currentNodes) {
+    const unrankedNodes = newNodes.filter(node => !node.isParent());
+    const n = unrankedNodes.length;
+    let maxRank = 0;
+    let i = 0;
+    while (unrankedNodes.length > 0 && i < n) {
+      for (let j = unrankedNodes.length - 1; j >= 0; j--) {
+        const node = unrankedNodes[j];
+        let calculatedRank = -1;
+
+        const ranksOfNeighbors = node.neighborhood().map(e => e.data('rank')).filter(rank => rank !== undefined);
+        if (node.neighborhood().intersection(currentNodes).length > 0) {
+          calculatedRank = 1;
+        } else if (ranksOfNeighbors.length > 0) {
+          calculatedRank = Math.min(...ranksOfNeighbors) + 1;
+        }
+
+        if (calculatedRank !== -1) {
+          node.data("rank", calculatedRank);
+          maxRank = Math.max(maxRank, calculatedRank);
+          for (const anc of node.ancestors()) {
+            anc.data("rank", Math.max(anc.data("rank") || 0, calculatedRank));
+          }
+          unrankedNodes.splice(j, 1);
+        }
+      }
+      i++;
+    }
+    for (const node of unrankedNodes) {
+      node.data("rank", 0);
+      for (const anc of node.ancestors()) {
+        if (!anc.data("rank")) {
+          anc.data("rank", 0);
+        }
+      }
+    }
+    return maxRank;
+  };
+  
   instance.placeHiddenNodes = function (mainEles) {
     mainEles.forEach(function (mainEle) {
       var hiddenEles = mainEle.neighborhood().nodes(":hidden");
@@ -70,7 +118,7 @@ var layoutUtilities = function (cy, options) {
             var curr = components[i][j].neighborhood().nodes().difference(eles);
             curr.forEach(function (ele) {
               positionedNeigbors.push(ele);
-            })
+            });
 
             for (var k = 0; k < neighbors.length; k++) {
               if (positioned[components[i].indexOf(neighbors[k])]) {
